@@ -58,4 +58,9 @@ public class WorkflowResponse {
      * 执行持续时间
      */
     private Duration duration;
+    
+    /**
+     * 错误消息
+     */
+    private String errorMessage;
 }

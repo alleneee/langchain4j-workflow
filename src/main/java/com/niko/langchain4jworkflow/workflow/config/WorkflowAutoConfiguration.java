@@ -1,6 +1,5 @@
 package com.niko.langchain4jworkflow.workflow.config;
 
-
 import com.niko.langchain4jworkflow.workflow.aspect.WorkflowAspect;
 import com.niko.langchain4jworkflow.workflow.core.*;
 import com.niko.langchain4jworkflow.workflow.metrics.MetricsRegistry;
@@ -16,6 +15,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,16 +33,16 @@ public class WorkflowAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public AnnotationBasedWorkflowEngine workflowEngine(
+    public WorkflowEngine workflowEngine(
             WorkflowRegistry registry,
             ThreadPoolTaskExecutor asyncExecutor,
-            CaffeineWorkflowCache cache,
+            WorkflowCache cache,
             MetricsRegistry metricsRegistry,
             ChatLanguageModel chatModel) {
 
         return AnnotationBasedWorkflowEngine.builder()
                 .registry(registry)
-                .asyncExecutor(asyncExecutor)
+                .executor(asyncExecutor)
                 .cache(cache)
                 .metrics(metricsRegistry)
                 .chatModel(chatModel)
@@ -71,12 +71,13 @@ public class WorkflowAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
+    @Primary
+    @ConditionalOnMissingBean(name = "workflowCache")
     @ConditionalOnProperty(value = "workflow.cache.enabled", havingValue = "true", matchIfMissing = true)
     public WorkflowCache workflowCache() {
         return new CaffeineWorkflowCache(CacheConfig.builder()
                 .maxSize(properties.getCache().getMaxSize())
-                .ttl(properties.getCache().getDefaultTtl())  // 修改这里，使用ttl而不是defaultTtl
+                .ttl(properties.getCache().getDefaultTtl())
                 .softValues(properties.getCache().isSoftValues())
                 .recordStats(properties.getCache().isRecordStats())
                 .build());
@@ -93,6 +94,7 @@ public class WorkflowAutoConfiguration {
     @ConditionalOnMissingBean
     public ChatLanguageModel chatLanguageModel() {
         return OpenAiChatModel.builder()
+                .baseUrl(properties.getAi().getBaseUrl())
                 .apiKey(properties.getAi().getOpenAiApiKey())
                 .modelName(properties.getAi().getModelName())
                 .maxTokens(properties.getAi().getMaxTokens())

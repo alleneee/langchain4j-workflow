@@ -7,25 +7,36 @@ spring:
 
 workflow:
   enabled: true
-  base-package: com.niko.langchain4jworkflow
-  async:
-    enabled: true
-    core-pool-size: 5
-    max-pool-size: 10
-    queue-capacity: 100
-  cache:
-    enabled: true
-    max-size: 10000
-    default-ttl: 10m
-  monitor:
-    enabled: true
-    log-input: false
-    log-output: true
   ai:
-    openai-api-key: ${OPENAI_API_KEY}
-    max-tokens: 1000
+    base-url: https://api.openai.com/v1
+    openai-api-key: ${OPENAI_API_KEY}  # 从环境变量获取
+    model-name: gpt-3.5-turbo
+    max-tokens: 2000
     temperature: 0.7
     timeout: 30s
+  
+  async:
+    core-pool-size: 5
+    max-pool-size: 10
+    queue-capacity: 25
+    thread-name-prefix: workflow-async-
+    keep-alive-time: 60s
+  
+  cache:
+    enabled: true
+    default-ttl: 1h
+    max-size: 10000
+    soft-values: false
+    record-stats: true
+  
+  monitor:
+    enabled: true
+    metric-prefix: workflow
+    detailed-metrics: true
+
+logging:
+  level:
+    com.niko.langchain4jworkflow: DEBUG
 
 management:
   endpoints:

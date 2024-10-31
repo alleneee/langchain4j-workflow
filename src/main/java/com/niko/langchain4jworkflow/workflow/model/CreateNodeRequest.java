@@ -3,6 +3,7 @@ package com.niko.langchain4jworkflow.workflow.model;
 import com.niko.langchain4jworkflow.workflow.core.NodeType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Map;
  * 包含创建新节点所需的所有参数信息
  */
 @Data
+@Builder
 public class CreateNodeRequest {
     /**
      * 节点名称
@@ -55,4 +57,9 @@ public class CreateNodeRequest {
      * 节点元数据
      */
     private Map<String, Object> metadata;
+
+    /**
+     * 子节点列表（用于PARALLEL类型节点）
+     */
+    private List<CreateNodeRequest> nodes;
 }

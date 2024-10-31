@@ -1,6 +1,7 @@
 package com.niko.langchain4jworkflow.workflow.model;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.Builder;
 import lombok.Data;
 
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.Map;
  * 包含执行工作流所需的所有参数信息
  */
 @Data
+@Builder
 public class ExecuteWorkflowRequest {
     /**
      * 工作流名称
