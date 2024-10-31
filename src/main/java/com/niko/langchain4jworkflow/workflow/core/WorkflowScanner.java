@@ -1,13 +1,13 @@
 package com.niko.langchain4jworkflow.workflow.core;
 
-
 import com.niko.langchain4jworkflow.workflow.annotation.Async;
 import com.niko.langchain4jworkflow.workflow.annotation.Retry;
 import com.niko.langchain4jworkflow.workflow.annotation.StateVariable;
 import com.niko.langchain4jworkflow.workflow.annotation.Workflow;
+import com.niko.langchain4jworkflow.workflow.annotation.Node;
+import com.niko.langchain4jworkflow.workflow.annotation.Timeout;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okio.Timeout;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.util.ReflectionUtils;
 
@@ -68,14 +68,14 @@ public class WorkflowScanner {
             Node nodeAnn = AnnotationUtils.findAnnotation(
                     method, Node.class);
             if (nodeAnn != null) {
-                Node node = buildNode(method, nodeAnn);
+                com.niko.langchain4jworkflow.workflow.core.Node node = buildNode(method, nodeAnn);
                 builder.addNode(node);
             }
         });
     }
 
-    private Node buildNode(Method method, Node nodeAnn) {
-        return Node.builder()
+    private com.niko.langchain4jworkflow.workflow.core.Node buildNode(Method method, Node nodeAnn) {
+        return com.niko.langchain4jworkflow.workflow.core.Node.builder()
                 .name(getNodeName(nodeAnn, method))
                 .type(nodeAnn.type())
                 .method(method)
@@ -91,8 +91,8 @@ public class WorkflowScanner {
         return name.isEmpty() ? method.getName() : name;
     }
 
-    private Node.NodeConfig buildNodeConfig(Method method) {
-        return Node.NodeConfig.builder()
+    private com.niko.langchain4jworkflow.workflow.core.Node.NodeConfig buildNodeConfig(Method method) {
+        return com.niko.langchain4jworkflow.workflow.core.Node.NodeConfig.builder()
                 .timeout(getTimeout(method))
                 .retryConfig(getRetryConfig(method))
                 .async(isAsync(method))
@@ -100,24 +100,16 @@ public class WorkflowScanner {
                 .build();
     }
 
-    private Duration getTimeout(Method method) {
-        Timeout timeoutAnn = AnnotationUtils.findAnnotation(
-                method, Timeout.class);
-        return timeoutAnn != null ?
-                Duration.of(timeoutAnn.value(), timeoutAnn.unit()) :
-                null;
-    }
-
-    private Node.RetryConfig getRetryConfig(Method method) {
+    private com.niko.langchain4jworkflow.workflow.core.Node.RetryConfig getRetryConfig(Method method) {
         Retry retryAnn = AnnotationUtils.findAnnotation(
                 method, Retry.class);
         if (retryAnn == null) {
             return null;
         }
 
-        return Node.RetryConfig.builder()
+        return com.niko.langchain4jworkflow.workflow.core.Node.RetryConfig.builder()
                 .maxAttempts(retryAnn.maxAttempts())
-                .initialDelay(Duration.ofMillis(retryAnn.initialDelay()))
+                .delay(Duration.ofMillis(retryAnn.initialDelay()))
                 .multiplier(retryAnn.multiplier())
                 .retryableExceptions(Arrays.asList(retryAnn.retryFor()))
                 .build();
@@ -169,9 +161,10 @@ public class WorkflowScanner {
 
     private Duration getWorkflowTimeout(Class<?> clazz) {
         Timeout timeoutAnn = AnnotationUtils.findAnnotation(clazz, Timeout.class);
-        return timeoutAnn != null ?
-                Duration.of(timeoutAnn.value(), timeoutAnn.unit()) :
-                null;
+        if (timeoutAnn == null) {
+            return null;
+        }
+        return Duration.ofMillis(timeoutAnn.unit().toMillis(timeoutAnn.value()));
     }
 
     private WorkflowDefinition.WorkflowConfig.RetryConfig getWorkflowRetryConfig(Class<?> clazz) {
@@ -200,5 +193,13 @@ public class WorkflowScanner {
 
     private boolean isWorkflowAsync(Class<?> clazz) {
         return AnnotationUtils.findAnnotation(clazz, Async.class) != null;
+    }
+
+    private Duration getTimeout(Method method) {
+        Timeout timeoutAnn = AnnotationUtils.findAnnotation(method, Timeout.class);
+        if (timeoutAnn == null) {
+            return null;
+        }
+        return Duration.ofMillis(timeoutAnn.unit().toMillis(timeoutAnn.value()));
     }
 }

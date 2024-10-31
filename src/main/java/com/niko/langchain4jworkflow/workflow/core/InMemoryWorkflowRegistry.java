@@ -1,5 +1,6 @@
 package com.niko.langchain4jworkflow.workflow.core;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,22 +15,27 @@ public class InMemoryWorkflowRegistry implements WorkflowRegistry {
     }
 
     @Override
-    public void unregister(String workflowName) {
-
-    }
-
-    @Override
     public Optional<WorkflowDefinition> get(String name) {
         return Optional.ofNullable(workflows.get(name));
     }
 
     @Override
-    public List<WorkflowDefinition> list() {
-        return List.of();
+    public void unregister(String name) {
+        workflows.remove(name);
     }
 
     @Override
-    public boolean exists(String workflowName) {
-        return false;
+    public boolean exists(String name) {
+        return workflows.containsKey(name);
+    }
+
+    @Override
+    public List<WorkflowDefinition> getAll() {
+        return new ArrayList<>(workflows.values());
+    }
+
+    @Override
+    public List<WorkflowDefinition> list() {
+        return getAll();
     }
 }

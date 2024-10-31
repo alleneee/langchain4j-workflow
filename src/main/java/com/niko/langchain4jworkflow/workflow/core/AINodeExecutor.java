@@ -4,6 +4,8 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -31,8 +33,9 @@ public class AINodeExecutor implements NodeExecutor {
             // 异步执行 AI 调用
             return CompletableFuture.supplyAsync(() -> {
                 String response = chatModel.generate(prompt);
-                state.setVariable(node.getName() + "_response", response);
-                state.recordNodeCompletion(node.getName());
+                Map<String, Object> outputs = new HashMap<>();
+                outputs.put("response", response);
+                state.recordNodeCompletion(node.getName(), outputs);
                 return state;
             });
 

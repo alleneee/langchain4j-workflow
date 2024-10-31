@@ -8,12 +8,8 @@ public class NodeCompleteEvent extends WorkflowEvent {
     private final String nodeName;
     private final WorkflowState state;
 
-    public NodeCompleteEvent(
-            String workflowName,
-            String executionId,
-            String nodeName,
-            WorkflowState state) {
-        super(workflowName, executionId);
+    public NodeCompleteEvent(Object source, String workflowName, String executionId, String nodeName, WorkflowState state) {
+        super(source, workflowName, executionId);
         this.nodeName = nodeName;
         this.state = state;
     }

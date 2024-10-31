@@ -1,9 +1,9 @@
 package com.niko.langchain4jworkflow.workflow.aspect;
 
-import com.niko.langchain4jworkflow.core.WorkflowContext;
-import com.niko.langchain4jworkflow.core.WorkflowState;
 import com.niko.langchain4jworkflow.workflow.annotation.Workflow;
+import com.niko.langchain4jworkflow.workflow.core.WorkflowContext;
 import com.niko.langchain4jworkflow.workflow.core.WorkflowEngine;
+import com.niko.langchain4jworkflow.workflow.core.WorkflowState;
 import com.niko.langchain4jworkflow.workflow.metrics.MetricsRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,16 +11,20 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 工作流切面
+ * 用于处理工作流执行的横切关注点
+ */
 @Aspect
 @Component
 @Slf4j
@@ -28,15 +32,26 @@ public class WorkflowAspect {
 
     private final WorkflowEngine workflowEngine;
     private final MetricsRegistry metricsRegistry;
+    private final ApplicationEventPublisher eventPublisher;
     private final Map<String, WorkflowMetrics> metricsMap = new ConcurrentHashMap<>();
 
-    public WorkflowAspect(WorkflowEngine workflowEngine, MetricsRegistry metricsRegistry) {
+    public WorkflowAspect(
+            WorkflowEngine workflowEngine,
+            MetricsRegistry metricsRegistry,
+            ApplicationEventPublisher eventPublisher) {
         this.workflowEngine = workflowEngine;
         this.metricsRegistry = metricsRegistry;
+        this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * 在工作流执行前后处理相关逻辑
+     * @param joinPoint 切点
+     * @return 方法执行结果
+     * @throws Throwable 执行异常
+     */
     @Around("@annotation(com.niko.langchain4jworkflow.workflow.annotation.Workflow)")
-    public Object aroundWorkflow(ProceedingJoinPoint joinPoint) throws Throwable {
+    public Object handleWorkflow(ProceedingJoinPoint joinPoint) throws Throwable {
         Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
         Workflow workflow = method.getAnnotation(Workflow.class);
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();

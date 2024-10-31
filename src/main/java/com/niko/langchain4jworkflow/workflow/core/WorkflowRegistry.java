@@ -6,11 +6,13 @@ import java.util.Optional;
 public interface WorkflowRegistry {
     void register(WorkflowDefinition workflow);
 
-    void unregister(String workflowName);
+    Optional<WorkflowDefinition> get(String name);
 
-    Optional<WorkflowDefinition> get(String workflowName);
+    void unregister(String name);
+
+    boolean exists(String name);
+
+    List<WorkflowDefinition> getAll();
 
     List<WorkflowDefinition> list();
-
-    boolean exists(String workflowName);
 }

@@ -60,7 +60,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
             activeExecutions.put(executionId, context);
 
             // 发布工作流开始事件
-            publishEvent(new WorkflowStartEvent(workflowName, executionId, inputs));
+            publishWorkflowStartEvent(workflowName, executionId, inputs);
 
             // 开始执行
             return executeWorkflow(context)
@@ -96,9 +96,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
             log.info("Stopped workflow execution: {}", executionId);
 
             // 发布工作流取消事件
-            publishEvent(new WorkflowCancelEvent(
-                    context.getWorkflow().getName(),
-                    executionId));
+            publishWorkflowCancelEvent(context.getWorkflow().getName(), executionId);
 
         } catch (Exception e) {
             log.error("Failed to stop workflow execution: {}", executionId, e);
@@ -156,10 +154,10 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
             }
 
             // 记录节点开始
-            publishEvent(new NodeStartEvent(
+            publishNodeStartEvent(
                     context.getWorkflow().getName(),
                     context.getState().getWorkflowId(),
-                    node.getName()));
+                    node.getName());
 
             // 执行节点
             return nodeExecutor.execute(node, context.getState(),
@@ -251,8 +249,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
                 "workflow", workflowName);
 
         // 发布完成事件
-        publishEvent(new WorkflowCompleteEvent(
-                workflowName, executionId, context.getState()));
+        publishWorkflowCompleteEvent(workflowName, executionId, context.getState());
 
         log.info("Workflow completed successfully: {} ({})",
                 workflowName, executionId);
@@ -272,8 +269,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
                 "error", error.getClass().getSimpleName());
 
         // 发布错误事件
-        publishEvent(new WorkflowErrorEvent(
-                workflowName, executionId, error));
+        publishWorkflowErrorEvent(workflowName, executionId, error);
 
         log.error("Workflow execution failed: {} ({})",
                 workflowName, executionId, error);
@@ -291,11 +287,11 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
                 "node", node.getName());
 
         // 发布节点完成事件
-        publishEvent(new NodeCompleteEvent(
+        publishNodeCompleteEvent(
                 context.getWorkflow().getName(),
                 context.getState().getWorkflowId(),
                 node.getName(),
-                state));
+                state);
     }
 
     private void handleNodeError(
@@ -311,17 +307,45 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
                 "error", error.getClass().getSimpleName());
 
         // 发布节点错误事件
-        publishEvent(new NodeErrorEvent(
+        publishNodeErrorEvent(
                 context.getWorkflow().getName(),
                 context.getState().getWorkflowId(),
                 node.getName(),
-                error));
+                error);
     }
 
     private void publishEvent(Object event) {
         if (eventPublisher != null) {
             eventPublisher.publishEvent(event);
         }
+    }
+
+    private void publishWorkflowStartEvent(String workflowName, String executionId, Map<String, Object> inputs) {
+        publishEvent(new WorkflowStartEvent(this, workflowName, executionId, inputs));
+    }
+
+    private void publishWorkflowCompleteEvent(String workflowName, String executionId, WorkflowState state) {
+        publishEvent(new WorkflowCompleteEvent(this, workflowName, executionId, state));
+    }
+
+    private void publishWorkflowErrorEvent(String workflowName, String executionId, Throwable error) {
+        publishEvent(new WorkflowErrorEvent(this, workflowName, executionId, error));
+    }
+
+    private void publishWorkflowCancelEvent(String workflowName, String executionId) {
+        publishEvent(new WorkflowCancelEvent(this, workflowName, executionId));
+    }
+
+    private void publishNodeStartEvent(String workflowName, String executionId, String nodeName) {
+        publishEvent(new NodeStartEvent(this, workflowName, executionId, nodeName));
+    }
+
+    private void publishNodeCompleteEvent(String workflowName, String executionId, String nodeName, WorkflowState state) {
+        publishEvent(new NodeCompleteEvent(this, workflowName, executionId, nodeName, state));
+    }
+
+    private void publishNodeErrorEvent(String workflowName, String executionId, String nodeName, Throwable error) {
+        publishEvent(new NodeErrorEvent(this, workflowName, executionId, nodeName, error));
     }
 
     private String generateExecutionId() {

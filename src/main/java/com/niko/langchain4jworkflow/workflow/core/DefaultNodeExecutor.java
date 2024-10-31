@@ -13,6 +13,8 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -129,10 +131,11 @@ public class DefaultNodeExecutor implements NodeExecutor {
             Node node,
             WorkflowState state,
             Object result) {
+        Map<String, Object> outputs = new HashMap<>();
         if (result != null) {
-            state.setVariable(node.getName() + "_result", result);
+            outputs.put("result", result);
         }
-        state.recordNodeCompletion(node.getName());
+        state.recordNodeCompletion(node.getName(), outputs);
         return state;
     }
 
@@ -141,8 +144,7 @@ public class DefaultNodeExecutor implements NodeExecutor {
             WorkflowState state,
             Throwable error) {
         log.error("Node execution failed: {}", node.getName(), error);
-        state.recordNodeError(// 继续 DefaultNodeExecutor.java 的 handleError 方法
-                node.getName(), error);
+        state.recordNodeError(node.getName(), error);
         if (error instanceof RuntimeException) {
             throw (RuntimeException) error;
         }

@@ -1,20 +1,21 @@
 package com.niko.langchain4jworkflow.workflow.service;
 
 import com.niko.langchain4jworkflow.workflow.core.*;
-import com.niko.langchain4jworkflow.workflow.exceptions.WorkflowExecutionException;
-import com.niko.langchain4jworkflow.workflow.exceptions.WorkflowNotFoundException;
+import com.niko.langchain4jworkflow.workflow.exceptions.*;
 import com.niko.langchain4jworkflow.workflow.metrics.MetricsRegistry;
 import com.niko.langchain4jworkflow.workflow.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -31,7 +32,6 @@ public class WorkflowServiceImpl implements WorkflowService {
             new ConcurrentHashMap<>();
 
     @Override
-    @Transactional
     public WorkflowDTO createWorkflow(CreateWorkflowRequest request) {
         log.info("Creating workflow: {}", request.getName());
 
@@ -64,7 +64,6 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
-    @Transactional
     public WorkflowDTO updateWorkflow(String id, UpdateWorkflowRequest request) {
         log.info("Updating workflow: {}", id);
 
@@ -92,7 +91,6 @@ public class WorkflowServiceImpl implements WorkflowService {
                     "Failed to update workflow: " + e.getMessage(), e);
         }
     }
-    @Transactional
     @Override
     public void deleteWorkflow(String id) {
         log.info("Deleting workflow: {}", id);
@@ -238,10 +236,26 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .type(request.getType())
                 .dependencies(request.getDependencies())
                 .config(buildNodeConfig(request.getConfig()))
-                .inputs(request.getInputs())
-                .outputs(request.getOutputs())
+                .inputs(mapStringToClassMap(request.getInputs()))
+                .outputs(mapStringToClassMap(request.getOutputs()))
                 .metadata(request.getMetadata())
                 .build();
+    }
+
+    private Map<String, Class<?>> mapStringToClassMap(Map<String, String> stringMap) {
+        if (stringMap == null) {
+            return null;
+        }
+        Map<String, Class<?>> result = new HashMap<>();
+        stringMap.forEach((key, className) -> {
+            try {
+                result.put(key, Class.forName(className));
+            } catch (ClassNotFoundException e) {
+                throw new WorkflowCreationException(
+                    "Failed to map class: " + className, e);
+            }
+        });
+        return result;
     }
 
     private WorkflowResponse buildInitialResponse(
@@ -320,7 +334,147 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .totalRetries((int) state.getExecutionHistory().values().stream()
                         .mapToInt(info -> info.getAttempts() - 1)
                         .sum())
-                .totalDuration(state.getDuration())
+                .duration(state.getDuration())
                 .build();
+    }
+
+    private Node.NodeConfig buildNodeConfig(NodeConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return Node.NodeConfig.builder()
+                .timeout(request.getTimeout())
+                .retryConfig(buildRetryConfig(request.getRetryConfig()))
+                .async(request.isAsync())
+                .systemPrompt(request.getSystemPrompt())
+                .properties(request.getProperties())
+                .build();
+    }
+
+    private Node.RetryConfig buildRetryConfig(RetryConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return Node.RetryConfig.builder()
+                .maxAttempts(request.getMaxAttempts())
+                .delay(request.getDelay())
+                .multiplier(request.getMultiplier())
+                .retryableExceptions(mapExceptionClasses(request.getRetryableExceptions()))
+                .build();
+    }
+
+    private WorkflowDefinition.WorkflowConfig buildConfig(WorkflowConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return WorkflowDefinition.WorkflowConfig.builder()
+                .timeout(request.getTimeout())
+                .retryConfig(buildWorkflowRetryConfig(request.getRetryConfig()))
+                .cacheConfig(buildCacheConfig(request.getCacheConfig()))
+                .monitorConfig(buildMonitorConfig(request.getMonitorConfig()))
+                .asyncEnabled(request.isAsyncEnabled())
+                .build();
+    }
+
+    private WorkflowDefinition.WorkflowConfig.RetryConfig buildWorkflowRetryConfig(RetryConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return WorkflowDefinition.WorkflowConfig.RetryConfig.builder()
+                .maxAttempts(request.getMaxAttempts())
+                .delay(request.getDelay())
+                .multiplier(request.getMultiplier())
+                .retryableExceptions(mapExceptionClasses(request.getRetryableExceptions()))
+                .build();
+    }
+
+    private WorkflowDefinition.WorkflowConfig.CacheConfig buildCacheConfig(CacheConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return WorkflowDefinition.WorkflowConfig.CacheConfig.builder()
+                .enabled(request.isEnabled())
+                .ttl(request.getTtl())
+                .maxSize(request.getMaxSize())
+                .softValues(request.isSoftValues())
+                .recordStats(request.isRecordStats())
+                .build();
+    }
+
+    private WorkflowDefinition.WorkflowConfig.MonitorConfig buildMonitorConfig(MonitorConfigRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return WorkflowDefinition.WorkflowConfig.MonitorConfig.builder()
+                .enabled(request.isEnabled())
+                .metricPrefix(request.getMetricPrefix())
+                .detailedMetrics(request.isDetailedMetrics())
+                .build();
+    }
+
+    private List<Class<? extends Throwable>> mapExceptionClasses(List<String> classNames) {
+        if (classNames == null) {
+            return null;
+        }
+        return classNames.stream()
+                .map(className -> {
+                    try {
+                        Class<?> clazz = Class.forName(className);
+                        if (Throwable.class.isAssignableFrom(clazz)) {
+                            @SuppressWarnings("unchecked")
+                            Class<? extends Throwable> exceptionClass = (Class<? extends Throwable>) clazz;
+                            return exceptionClass;
+                        }
+                        throw new IllegalArgumentException("Class is not a Throwable: " + className);
+                    } catch (ClassNotFoundException e) {
+                        throw new IllegalArgumentException("Class not found: " + className, e);
+                    }
+                })
+                .collect(Collectors.toList());
+    }
+
+    private WorkflowResponse buildInProgressResponse(String executionId, CompletableFuture<WorkflowState> future) {
+        return WorkflowResponse.builder()
+                .executionId(executionId)
+                .status("RUNNING")
+                .startTime(Instant.now())
+                .build();
+    }
+
+    private String getWorkflowId(CompletableFuture<WorkflowState> future) {
+        try {
+            return future.getNow(null).getWorkflowId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private WorkflowDefinition updateWorkflowDefinition(WorkflowDefinition existing, UpdateWorkflowRequest request) {
+        return WorkflowDefinition.builder()
+                .name(existing.getName())
+                .description(request.getDescription() != null ? request.getDescription() : existing.getDescription())
+                .nodes(request.getNodes() != null ? buildNodes(request.getNodes()) : existing.getNodes())
+                .config(request.getConfig() != null ? buildConfig(request.getConfig()) : existing.getConfig())
+                .metadata(request.getMetadata() != null ? request.getMetadata() : existing.getMetadata())
+                .build();
+    }
+
+    @Override
+    public WorkflowDTO getWorkflow(String id) {
+        log.debug("Getting workflow: {}", id);
+        
+        WorkflowDefinition workflow = workflowRegistry.get(id)
+                .orElseThrow(() -> new WorkflowNotFoundException(id));
+        
+        return mapper.toDto(workflow);
+    }
+
+    @Override
+    public List<WorkflowDTO> listWorkflows() {
+        log.debug("Listing all workflows");
+        
+        return workflowRegistry.getAll().stream()
+                .map(mapper::toDto)
+                .collect(Collectors.toList());
     }
 }

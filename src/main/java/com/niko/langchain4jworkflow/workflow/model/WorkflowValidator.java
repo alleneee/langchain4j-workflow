@@ -1,8 +1,11 @@
 package com.niko.langchain4jworkflow.workflow.model;
 
+import com.niko.langchain4jworkflow.workflow.core.NodeType;
+import com.niko.langchain4jworkflow.workflow.exceptions.ValidationException;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 public class WorkflowValidator {

@@ -1,188 +1,81 @@
 package com.niko.langchain4jworkflow.workflow.metrics;
 
-
-import com.niko.langchain4jworkflow.workflow.core.WorkflowState;
-import com.niko.langchain4jworkflow.workflow.event.NodeErrorEvent;
-import com.niko.langchain4jworkflow.workflow.event.WorkflowStartEvent;
+import com.niko.langchain4jworkflow.workflow.event.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.HashMap;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 工作流指标收集器
+ * 负责收集和管理工作流执行的各项指标
+ */
 @Component
 @RequiredArgsConstructor
 public class WorkflowMetricsCollector {
     private final MetricsRegistry metricsRegistry;
-    private final Map<String, WorkflowMetrics> activeWorkflows =
-            new ConcurrentHashMap<>();
+    private final Map<String, Instant> startTimes = new ConcurrentHashMap<>();
 
+    /**
+     * 记录工作流开始执行
+     * @param workflowId 工作流ID
+     */
     @EventListener
     public void onWorkflowStart(WorkflowStartEvent event) {
-        String workflowId = event.getWorkflowId();
-        WorkflowMetrics.Builder metricsBuilder = WorkflowMetrics.builder()
-                .workflowId(workflowId)
-                .workflowName(event.getWorkflowName())
-                .nodeMetrics(new HashMap<>());
-
-        activeWorkflows.put(workflowId, metricsBuilder);
-
+        startTimes.put(event.getExecutionId(), Instant.now());
         metricsRegistry.incrementCounter(
                 "workflow.starts",
-                "workflow", event.getWorkflowName()
-        );
+                "workflow", event.getWorkflowName());
     }
 
+    /**
+     * 记录工作流执行完成
+     * @param workflowId 工作流ID
+     * @param duration 执行持续时间
+     */
     @EventListener
     public void onWorkflowComplete(WorkflowCompleteEvent event) {
-        String workflowId = event.getWorkflowId();
-        WorkflowMetrics.Builder metricsBuilder =
-                activeWorkflows.remove(workflowId);
-
-        if (metricsBuilder != null) {
-            WorkflowState state = event.getState();
-            WorkflowMetrics metrics = buildMetrics(metricsBuilder, state);
-
-            // 记录完成指标
-            recordCompletionMetrics(metrics);
-        }
+        recordCompletion(event.getExecutionId(), event.getWorkflowName(), true);
     }
 
     @EventListener
-    public void onNodeComplete(NodeCompleteEvent event) {
-        String workflowId = event.getWorkflowId();
-        WorkflowMetrics.Builder metricsBuilder =
-                activeWorkflows.get(workflowId);
-
-        if (metricsBuilder != null) {
-            String nodeName = event.getNodeName();
-            Duration duration = Duration.ofMillis(event.getDuration());
-
-            // 更新节点指标
-            WorkflowMetrics.NodeMetrics nodeMetrics =
-                    WorkflowMetrics.NodeMetrics.builder()
-                            .nodeName(nodeName)
-                            .duration(duration)
-                            .attempts(event.getAttempts())
-                            .successful(true)
-                            .build();
-
-            metricsBuilder.nodeMetrics.put(nodeName, nodeMetrics);
-
-            // 记录节点指标
-            recordNodeMetrics(nodeName, nodeMetrics);
-        }
-    }
-
-    @EventListener
-    public void onNodeError(NodeErrorEvent event) {
-        String workflowId = event.getWorkflowId();
-        WorkflowMetrics.Builder metricsBuilder =
-                activeWorkflows.get(workflowId);
-
-        if (metricsBuilder != null) {
-            String nodeName = event.getNodeName();
-
-            // 更新节点错误指标
-            WorkflowMetrics.NodeMetrics nodeMetrics =
-                    WorkflowMetrics.NodeMetrics.builder()
-                            .nodeName(nodeName)
-                            .attempts(event.getAttempts())
-                            .successful(false)
-                            .errorType(event.getError().getClass().getSimpleName())
-                            .build();
-
-            metricsBuilder.nodeMetrics.put(nodeName, nodeMetrics);
-
-            // 记录错误指标
-            recordNodeErrorMetrics(nodeName, nodeMetrics);
-        }
-    }
-
-    private WorkflowMetrics buildMetrics(
-            WorkflowMetrics.Builder builder,
-            WorkflowState state) {
-        return builder
-                .duration(Duration.ofMillis(state.getDuration()))
-                .nodeCount(state.getExecutionHistory().size())
-                .successfulNodes((int) state.getExecutionHistory().values().stream()
-                        .filter(info -> info.getError() == null)
-                        .count())
-                .failedNodes((int) state.getExecutionHistory().values().stream()
-                        .filter(info -> info.getError() != null)
-                        .count())
-                .retryCount((int) state.getExecutionHistory().values().stream()
-                        .mapToInt(info -> info.getAttempts() - 1)
-                        .sum())
-                .build();
-    }
-
-    private void recordCompletionMetrics(WorkflowMetrics metrics) {
-        String workflowName = metrics.getWorkflowName();
-
-        metricsRegistry.recordTime(
-                "workflow.duration",
-                metrics.getDuration().toMillis(),
-                "workflow", workflowName
-        );
-
-        metricsRegistry.recordValue(
-                "workflow.nodes.total",
-                metrics.getNodeCount(),
-                "workflow", workflowName
-        );
-
-        metricsRegistry.recordValue(
-                "workflow.nodes.successful",
-                metrics.getSuccessfulNodes(),
-                "workflow", workflowName
-        );
-
-        metricsRegistry.recordValue(
-                "workflow.nodes.failed",
-                metrics.getFailedNodes(),
-                "workflow", workflowName
-        );
-
-        metricsRegistry.recordValue(
-                "workflow.retries",
-                metrics.getRetryCount(),
-                "workflow", workflowName
-        );
-    }
-
-    private void recordNodeMetrics(
-            String nodeName,
-            WorkflowMetrics.NodeMetrics metrics) {
-        metricsRegistry.recordTime(
-                "node.duration",
-                metrics.getDuration().toMillis(),
-                "node", nodeName
-        );
-
-        metricsRegistry.recordValue(
-                "node.attempts",
-                metrics.getAttempts(),
-                "node", nodeName
-        );
-    }
-
-    private void recordNodeErrorMetrics(
-            String nodeName,
-            WorkflowMetrics.NodeMetrics metrics) {
+    public void onWorkflowError(WorkflowErrorEvent event) {
+        recordCompletion(event.getExecutionId(), event.getWorkflowName(), false);
         metricsRegistry.incrementCounter(
-                "node.errors",
-                "node", nodeName,
-                "error", metrics.getErrorType()
-        );
+                "workflow.errors",
+                "workflow", event.getWorkflowName(),
+                "error", event.getError().getClass().getSimpleName());
+    }
 
-        metricsRegistry.recordValue(
-                "node.attempts",
-                metrics.getAttempts(),
-                "node", nodeName
-        );
+    @EventListener
+    public void onWorkflowCancel(WorkflowCancelEvent event) {
+        recordCompletion(event.getExecutionId(), event.getWorkflowName(), false);
+        metricsRegistry.incrementCounter(
+                "workflow.cancellations",
+                "workflow", event.getWorkflowName());
+    }
+
+    private void recordCompletion(String executionId, String workflowName, boolean success) {
+        Instant startTime = startTimes.remove(executionId);
+        if (startTime != null) {
+            Duration duration = Duration.between(startTime, Instant.now());
+            metricsRegistry.recordWorkflowExecution(workflowName, duration, success);
+        }
+    }
+
+    public void incrementCounter(String name, String... tags) {
+        metricsRegistry.incrementCounter(name, tags);
+    }
+
+    public void recordTime(String name, long duration, String... tags) {
+        metricsRegistry.recordTime(name, duration, tags);
+    }
+
+    public void recordValue(String name, double value, String... tags) {
+        metricsRegistry.recordValue(name, value, tags);
     }
 }

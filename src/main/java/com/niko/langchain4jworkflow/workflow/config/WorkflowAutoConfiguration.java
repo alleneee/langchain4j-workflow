@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Slf4j
 @Configuration
@@ -32,10 +33,10 @@ public class WorkflowAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public WorkflowEngine workflowEngine(
+    public AnnotationBasedWorkflowEngine workflowEngine(
             WorkflowRegistry registry,
             ThreadPoolTaskExecutor asyncExecutor,
-            WorkflowCache cache,
+            CaffeineWorkflowCache cache,
             MetricsRegistry metricsRegistry,
             ChatLanguageModel chatModel) {
 
@@ -102,8 +103,9 @@ public class WorkflowAutoConfiguration {
 
     @Bean
     public WorkflowAspect workflowAspect(
-            WorkflowEngine engine,
-            MetricsRegistry metricsRegistry) {
-        return new WorkflowAspect(engine, metricsRegistry);
+            WorkflowEngine workflowEngine,
+            MetricsRegistry metricsRegistry,
+            ApplicationEventPublisher eventPublisher) {
+        return new WorkflowAspect(workflowEngine, metricsRegistry, eventPublisher);
     }
 }

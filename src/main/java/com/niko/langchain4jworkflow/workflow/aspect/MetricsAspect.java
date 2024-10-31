@@ -1,7 +1,6 @@
 package com.niko.langchain4jworkflow.workflow.aspect;
 
-import com.niko.langchain4jworkflow.workflow.annotation.Monitor;
-import com.niko.langchain4jworkflow.workflow.metrics.MetricsRegistry;
+import com.niko.langchain4jworkflow.workflow.metrics.WorkflowMetricsCollector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -11,22 +10,31 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 
+/**
+ * 工作流指标收集切面
+ * 用于收集工作流执行的相关指标
+ */
 @Aspect
 @Component
 @Slf4j
 @RequiredArgsConstructor
 public class MetricsAspect {
-    private final MetricsRegistry metricsRegistry;
+    private final WorkflowMetricsCollector metricsCollector;
 
-    @Around("@annotation(monitor)")
-    public Object recordMetrics(ProceedingJoinPoint joinPoint, Monitor monitor)
-            throws Throwable {
+    /**
+     * 在工作流执行前后收集指标
+     * @param joinPoint 切点
+     * @return 方法执行结果
+     * @throws Throwable 执行异常
+     */
+    @Around("@annotation(com.niko.langchain4jworkflow.workflow.annotation.CollectMetrics)")
+    public Object collectMetrics(ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
         long startTime = System.currentTimeMillis();
 
         try {
             // 记录调用次数
-            metricsRegistry.incrementCounter(
+            metricsCollector.incrementCounter(
                     methodName + ".calls",
                     "class", joinPoint.getTarget().getClass().getSimpleName()
             );
@@ -35,7 +43,7 @@ public class MetricsAspect {
             Object result = joinPoint.proceed();
 
             // 记录成功次数
-            metricsRegistry.incrementCounter(
+            metricsCollector.incrementCounter(
                     methodName + ".success",
                     "class", joinPoint.getTarget().getClass().getSimpleName()
             );
@@ -44,7 +52,7 @@ public class MetricsAspect {
 
         } catch (Exception e) {
             // 记录失败次数
-            metricsRegistry.incrementCounter(
+            metricsCollector.incrementCounter(
                     methodName + ".failures",
                     "class", joinPoint.getTarget().getClass().getSimpleName(),
                     "error", e.getClass().getSimpleName()
@@ -54,18 +62,18 @@ public class MetricsAspect {
         } finally {
             // 记录执行时间
             long duration = System.currentTimeMillis() - startTime;
-            metricsRegistry.recordTime(
+            metricsCollector.recordTime(
                     methodName + ".duration",
                     duration,
                     "class", joinPoint.getTarget().getClass().getSimpleName()
             );
 
             // 记录自定义指标
-            if (monitor.metrics().length > 0) {
-                Arrays.stream(monitor.metrics()).forEach(metric ->
-                        metricsRegistry.recordValue(
-                                methodName + "." + metric,
-                                extractMetricValue(metric, joinPoint),
+            if (joinPoint.getArgs().length > 0) {
+                Arrays.stream(joinPoint.getArgs()).forEach(arg ->
+                        metricsCollector.recordValue(
+                                methodName + "." + arg.getClass().getSimpleName(),
+                                extractMetricValue(arg, joinPoint),
                                 "class", joinPoint.getTarget().getClass().getSimpleName()
                         )
                 );
@@ -73,7 +81,7 @@ public class MetricsAspect {
         }
     }
 
-    private double extractMetricValue(String metric, ProceedingJoinPoint joinPoint) {
+    private double extractMetricValue(Object arg, ProceedingJoinPoint joinPoint) {
         // 实现从方法参数或返回值中提取指标值的逻辑
         return 0.0;
     }

@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -56,15 +58,16 @@ public class ParallelNodeExecutor implements NodeExecutor {
             WorkflowState originalState,
             List<CompletableFuture<WorkflowState>> futures) {
 
+        Map<String, Object> mergedOutputs = new HashMap<>();
         futures.stream()
                 .map(CompletableFuture::join)
                 .forEach(state -> {
-                    originalState.getVariables().putAll(state.getVariables());
+                    mergedOutputs.putAll(state.getVariables());
                     originalState.getExecutionHistory()
                             .putAll(state.getExecutionHistory());
                 });
 
-        originalState.recordNodeCompletion(originalState.getWorkflowId());
+        originalState.recordNodeCompletion(originalState.getWorkflowId(), mergedOutputs);
         return originalState;
     }
 }
